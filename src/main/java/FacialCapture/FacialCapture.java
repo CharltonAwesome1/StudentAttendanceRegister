@@ -1,3 +1,4 @@
+// one 
 package FacialCapture;
 
 import javax.swing.*;
@@ -9,76 +10,43 @@ import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-// import org.bytedeco.opencv.opencv_core.Point;
 import org.bytedeco.javacv.*;
 import org.bytedeco.opencv.opencv_core.Mat;
-
 import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.RectVector;
 import org.bytedeco.opencv.opencv_core.Scalar;
 import org.bytedeco.opencv.global.opencv_imgproc;
-
-import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier; // Use this for JavaCV bindings
-
-// import org.opencv.videoio.VideoCapture;
+import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
 
 public class FacialCapture {
     private static Connection dbConnection;
     private static CascadeClassifier faceDetector;
-    private static OpenCVFrameGrabber grabber;
-    private static JLabel imageLabel;
-    private static volatile boolean thing = true; // Mark as volatile
-    private static Thread cameraFeedThread;
-    private static boolean isRecognitionInProgress = false;
-
-    private static void startCameraFeed() {
-        if (cameraFeedThread == null || !cameraFeedThread.isAlive()) {
-            thing = true;
-            isRecognitionInProgress = false;
-            System.out.println("new Thread(FacialCapture::updateCameraFeed);");
-            cameraFeedThread = new Thread(FacialCapture::updateCameraFeed);
-            cameraFeedThread.start();
-        }
-    }
-
-    private static void stopCameraFeed() {
-        if (cameraFeedThread != null && cameraFeedThread.isAlive()) {
-            thing = false; // Stop the camera feed
-            try {
-                cameraFeedThread.join(); // Wait for the thread to finish
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
-    }
+    private static OpenCVFrameGrabber cameraGrabber;
+    private static JLabel videoDisplayLabel;
 
     public static void main(String[] args) {
         // Initialize resources
         try {
-            System.out.println("one");
+            System.out.println("Initializing database connection...");
             dbConnection = DatabaseHelper.connect();
-            System.out.println("two");
+            System.out.println("Database connection established.");
 
-            grabber = new OpenCVFrameGrabber(0);
-
+            System.out.println("Initializing camera grabber...");
+            cameraGrabber = new OpenCVFrameGrabber(0);
             System.out.println(LocalDateTime.now());
-
-            System.out.println("three");
-
-            grabber.start();
+            cameraGrabber.start();
             System.out.println(OpenCVFrameGrabber.list);
             System.out.println(LocalDateTime.now());
 
-            System.out.println("four");
-            System.out.println(LocalDateTime.now());
-            System.out.println("five");
-            faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
+            System.out.println("Camera grabber initialized.");
 
+            System.out.println("Loading face detector...");
+            faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
             System.out.println(LocalDateTime.now());
             if (faceDetector.empty()) {
-                System.out.println("oopsie");
-                faceDetector.close();
+                throw new RuntimeException("Failed to load face detector.");
             }
+            System.out.println("Face detector loaded successfully.");
         } catch (Exception e) {
             e.printStackTrace();
             return;
@@ -89,39 +57,35 @@ public class FacialCapture {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(800, 600);
 
-        imageLabel = new JLabel();
-        frame.add(imageLabel, BorderLayout.CENTER);
+        videoDisplayLabel = new JLabel();
+        frame.add(videoDisplayLabel, BorderLayout.CENTER);
 
         JPanel buttonPanel = new JPanel();
         JButton captureButton = new JButton("Capture Face");
-        // JButton recognizeButton = new JButton("Recognize Face");
-        JButton extraButton = new JButton("extraButton extraButton");
-
+        JButton recognizeButton = new JButton("Recognize Face");
         buttonPanel.add(captureButton);
-        // buttonPanel.add(recognizeButton);
-        buttonPanel.add(extraButton);
+        buttonPanel.add(recognizeButton);
         frame.add(buttonPanel, BorderLayout.SOUTH);
 
         // Add button actions
         captureButton.addActionListener(e -> captureFace());
-        // recognizeButton.addActionListener(e -> recognizeFace());
-        extraButton.addActionListener(e -> recognizeFaceTwo());
+        recognizeButton.addActionListener(e -> recognizeFaceTwo());
 
         // Start updating the camera feed
         new Thread(FacialCapture::updateCameraFeed).start();
 
         frame.setVisible(true);
-
     }
+
 
     private static void recognizeFaceTwo() {
         try {
-            org.bytedeco.javacv.Frame frame = grabber.grab();
-            if (frame != null) {
-                Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
+            org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
+            if (grabbedFrame != null) {
+                Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
 
                 // Detect faces and get bounding rectangles
-                List<Rect> detectedFaces = detectFaces(mat);
+                List<Rect> detectedFaces = detectFaces(frameMatrix);
 
                 // Clone detected face rectangles to freeze the state
                 List<Rect> frozenFaces = new ArrayList<>();
@@ -143,26 +107,26 @@ public class FacialCapture {
 
                 for (Rect rect : frozenFaces) {
                     opencv_imgproc.rectangle(
-                            mat,
+                            frameMatrix,
                             rect,
                             new Scalar(0, 255, 0, 0)); // Green color for highlighting
                 }
 
                 // Convert Mat back to BufferedImage for display
-                BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(mat));
+                BufferedImage capturedImage = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(frameMatrix));
 
                 // Show the image with detected faces in a selection window
                 JFrame selectionFrame = new JFrame("Select a Face");
                 // selectionFrame.setSize(800, 600);
-                selectionFrame.setSize(image.getWidth(), image.getHeight());
+                selectionFrame.setSize(capturedImage.getWidth(), capturedImage.getHeight());
                 selectionFrame.setResizable(false);
-                JLabel imageLabel = new JLabel(new ImageIcon(image));
+                JLabel imageLabel = new JLabel(new ImageIcon(capturedImage));
                 selectionFrame.add(imageLabel);
                 selectionFrame.setVisible(true);
 
                 // Calculate the scaling factor
-                double scaleX = (double) image.getWidth() / mat.cols();
-                double scaleY = (double) image.getHeight() / mat.rows();
+                double scaleX = (double) capturedImage.getWidth() / frameMatrix.cols();
+                double scaleY = (double) capturedImage.getHeight() / frameMatrix.rows();
                 // image.rele
 
                 // Add mouse listener for face selection using frozenFaces
@@ -202,7 +166,7 @@ public class FacialCapture {
                                         ", y=" + rect.y() + ", width=" + rect.width() +
                                         ", height=" + rect.height() + "]");
                                 // System.out.println("Face Selected: " + rect);
-                                Mat selectedFace = new Mat(mat, rect);
+                                Mat selectedFace = new Mat(frameMatrix, rect);
 
                                 // Pass the selected Mat to generateEmbedding()
                                 byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
@@ -242,14 +206,14 @@ public class FacialCapture {
 
         try {
 
-            while (thing) {
-                org.bytedeco.javacv.Frame frame = grabber.grab();
-                if (frame != null) {
-                    Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
-                    FaceProcessor.highlightFaces(mat, faceDetector);
+            while (true) {
+                org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
+                if (grabbedFrame != null) {
+                    Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
+                    FaceProcessor.highlightFaces(frameMatrix, faceDetector);
 
-                    BufferedImage image = new Java2DFrameConverter().convert(frame);
-                    SwingUtilities.invokeLater(() -> imageLabel.setIcon(new ImageIcon(image)));
+                    BufferedImage videoFrame = new Java2DFrameConverter().convert(grabbedFrame);
+                    SwingUtilities.invokeLater(() -> videoDisplayLabel.setIcon(new ImageIcon(videoFrame)));
                 }
                 Thread.sleep(33); // ~30fps
             }
@@ -260,7 +224,7 @@ public class FacialCapture {
 
     private static void captureFace() {
         try {
-            org.bytedeco.javacv.Frame frame = grabber.grab();
+            org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
             if (frame != null) {
                 Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
 
@@ -295,10 +259,6 @@ public class FacialCapture {
                 // Calculate the scaling factor
                 double scaleX = (double) image.getWidth() / mat.cols();
                 double scaleY = (double) image.getHeight() / mat.rows();
-                System.out.println(image.getWidth());
-                System.out.println(image.getHeight());
-                System.out.println(mat.cols());
-                System.out.println(mat.rows());
 
                 // Add mouse listener for face selection
                 imageLabel.addMouseListener(new MouseAdapter() {
@@ -343,27 +303,30 @@ public class FacialCapture {
         }
     }
 
-    private static List<Rect> detectFaces(Mat mat) {
+    private static List<Rect> detectFaces(Mat frameMatrix) {
         List<Rect> faceRectangles = new ArrayList<>();
         RectVector detectedFaces = new RectVector();
 
         try {
             for (int j = 0; j < 33; j++) {
-                Mat gray = new Mat();
+                Mat grayFrame = new Mat();
 
                 // Convert to grayscale
-                opencv_imgproc.cvtColor(mat, gray, opencv_imgproc.COLOR_BGR2GRAY);
+                opencv_imgproc.cvtColor(frameMatrix, grayFrame, opencv_imgproc.COLOR_BGR2GRAY);
 
                 // Enhance contrast (optional)
-                opencv_imgproc.equalizeHist(gray, gray);
+                opencv_imgproc.equalizeHist(grayFrame, grayFrame);
 
-                faceDetector.detectMultiScale(gray, detectedFaces);
+                faceDetector.detectMultiScale(grayFrame, detectedFaces);
 
                 for (int i = 0; i < detectedFaces.size(); i++) {
-                    Rect rect = detectedFaces.get(i);
+                    Rect detectedFace = detectedFaces.get(i);
 
                     // Validate rect dimensions
-                    if (rect.width() > 0 && rect.height() > 0) {
+                    if (detectedFace.width() > 0 && detectedFace.height() > 0) {
+                        System.out.println("Detected face: x=" + detectedFace.x() + ", y=" + detectedFace.y() +
+                        ", width=" + detectedFace.width() + ", height=" + detectedFace.height());
+
                         boolean shouldAdd = true; // Assume the rectangle is valid for now
 
                         // Check overlap with existing rectangles
@@ -371,10 +334,10 @@ public class FacialCapture {
                             Rect existingRect = faceRectangles.get(k);
 
                             // If fully contained or significantly overlapping, keep the larger rectangle
-                            if (isFullyContained(rect, existingRect) || calculateIoU(existingRect, rect) > 0.5) {
-                                if (calculateArea(rect) > calculateArea(existingRect)) {
+                            if (isFullyContained(detectedFace, existingRect) || calculateIoU(existingRect, detectedFace) > 0.5) {
+                                if (calculateArea(detectedFace) > calculateArea(existingRect)) {
                                     // Replace the smaller rectangle with the larger one
-                                    faceRectangles.set(k, rect);
+                                    faceRectangles.set(k, detectedFace);
                                 }
                                 shouldAdd = false; // Do not add this rectangle again
                                 break;
@@ -382,15 +345,15 @@ public class FacialCapture {
                         }
 
                         if (shouldAdd) {
-                            faceRectangles.add(rect);
+                            faceRectangles.add(detectedFace);
                         }
                     } else {
-                        System.out.println("Invalid Rect dimensions detected.");
+                        System.out.println("Invalid face dimensions detected.");
                     }
                 }
 
                 Thread.sleep(1);
-                gray.close();
+                grayFrame.close();
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -430,44 +393,6 @@ public class FacialCapture {
 
         // Calculate and return the IoU (Intersection over Union)
         return (double) intersectionArea / unionArea;
-    }
-
-    private static void recognizeFace() {
-        if (isRecognitionInProgress) {
-            return; // Prevent recognition if it's already in progress
-        }
-
-        isRecognitionInProgress = true; // Mark recognition as in progress
-
-        stopCameraFeed(); // Stop the camera feed before recognizing face
-
-        try {
-            System.out.println("recognizeFace: Starting recognition process");
-            org.bytedeco.javacv.Frame frame = grabber.grab();
-            if (frame != null) {
-                Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
-
-                List<Mat> faces = FaceProcessor.detectAndSaveFaces(mat, faceDetector);
-                if (faces != null) {
-                    for (Mat face : faces) {
-                        byte[] embedding = FaceProcessor.generateEmbedding(face);
-                        String isRecognized = DatabaseHelper.isFaceRecognized(dbConnection, embedding);
-                        if (isRecognized != null && !isRecognized.isEmpty()) {
-                            String formattedString = String.format("Face recognized as \"%s\"", isRecognized);
-                            JOptionPane.showMessageDialog(null, formattedString);
-                            return;
-                        } else {
-                            JOptionPane.showMessageDialog(null, "Face not recognized.");
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            isRecognitionInProgress = false; // Reset recognition state
-            startCameraFeed(); // Restart the camera feed after recognition attempt
-        }
     }
 
 }
