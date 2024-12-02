@@ -125,12 +125,15 @@ public class DatabaseHelper {
         System.out.println("query: " + query);
         // int counter = 0;
         // query = "";
-        try (Statement statement = connection.createStatement();
+        try (
+                Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(query)) {
 
             while (resultSet.next()) {
                 // counter ++;
+                System.out.println("counter one");
                 byte[] dbEmbedding = resultSet.getBytes("embedding");
+                System.out.println("counter two");
                 String name = resultSet.getString("name");
                 // query += name + "\n";
 
@@ -142,14 +145,14 @@ public class DatabaseHelper {
                 System.out.println("distance: " + distance);
                 System.out.println((similarity > 0.4) + " " + (distance < 150));
 
-                // if (similarity > 0.4 && distance < 140) { // Recognition threshold
-                //     System.out.println("Recognized as: " + name);
-                //     System.out.println("Face recognized with similarity: " + similarity + ", distance: " + distance);
-                //     return name;
-                // }
+                if (similarity > 0.4 && distance < 140) { // Recognition threshold
+                    System.out.println("Recognized as: " + name);
+                    System.out.println("Face recognized with similarity: " + similarity + ", distance: " + distance);
+                    return name;
+                }
             }
 
-            return "failure";
+            return "Unable to recognize face";
             // System.out.println("counter: " + counter);
         } catch (SQLException e) {
             e.printStackTrace();
