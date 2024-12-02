@@ -90,9 +90,9 @@ public class FaceProcessor {
         // Draw rectangles around detected faces and extract face regions
         for (int i = 0; i < detectedFaces.size(); i++) {
             Rect rect = detectedFaces.get(i);
-            System.out.println("mat and rect");
-            System.out.println(mat);
-            System.out.println(rect);
+            // System.out.println("mat and rect");
+            // System.out.println(mat);
+            // System.out.println(rect);
 
             // Draw rectangle on the original frame
             opencv_imgproc.rectangle(
@@ -118,12 +118,13 @@ public class FaceProcessor {
     public static byte[] generateEmbedding(Mat face) {
         // Flatten and normalize face matrix (placeholder)
         byte[] embedding = new byte[(int) (face.total() * face.elemSize())];
+        System.out.println(embedding.length);
         face.data().get(embedding);
         return embedding;
     }
 
     public static void highlightFaces(Mat mat, CascadeClassifier faceDetector) {
-        System.out.println("highlightFaces - Start");
+        // System.out.println("highlightFaces - Start");
 
         // Check if the input image or faceDetector is null
         if (mat == null || faceDetector == null) {
@@ -135,17 +136,17 @@ public class FaceProcessor {
         try {
             // Convert frame to grayscale
             opencv_imgproc.cvtColor(mat, gray, opencv_imgproc.COLOR_BGR2GRAY);
-            System.out.println("Grayscale conversion successful");
+            // System.out.println("Grayscale conversion successful");
         } catch (Exception ex) {
             System.out.println("Error in grayscale conversion: " + ex.getMessage());
             ex.printStackTrace();
             return;
         }
 
-        if (gray.empty()) {
-            System.out.println("Gray image is empty after conversion.");
-            return;
-        }
+        // if (gray.empty()) {
+        //     System.out.println("Gray image is empty after conversion.");
+        //     return;
+        // }
 
         // Check if the CascadeClassifier is loaded properly
         faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
@@ -158,9 +159,9 @@ public class FaceProcessor {
         // Initialize the RectVector to store detected faces
         RectVector detectedFaces = new RectVector();
         try {
-            System.out.println("Before detectMultiScale");
+            // System.out.println("Before detectMultiScale");
             faceDetector.detectMultiScale(gray, detectedFaces);
-            System.out.println("After detectMultiScale");
+            // System.out.println("After detectMultiScale");
 
         } catch (Exception e) {
             System.out.println("Error in detectMultiScale: " + e.getMessage());
@@ -169,9 +170,9 @@ public class FaceProcessor {
         }
 
         // System.out.println("Number of faces detected: " + detectedFaces.size());
-        if (detectedFaces.size() == 0) {
-            System.out.println("No faces detected");
-        }
+        // if (detectedFaces.size() == 0) {
+        //     System.out.println("No faces detected");
+        // }
 
         // Draw rectangles around detected faces
         for (int i = 0; i < detectedFaces.size(); i++) {
