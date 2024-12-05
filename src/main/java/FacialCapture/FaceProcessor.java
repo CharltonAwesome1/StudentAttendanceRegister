@@ -32,7 +32,6 @@ public class FaceProcessor {
             return null;
         }
 
-        // System.out.println("Number of faces detected: " + detectedFaces.size());
 
         // Draw rectangles around detected faces and extract face regions
         for (int i = 0; i < detectedFaces.size(); i++) {

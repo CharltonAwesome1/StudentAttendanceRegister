@@ -16,23 +16,19 @@ import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.RectVector;
 import org.bytedeco.opencv.opencv_core.Scalar;
+import org.bytedeco.opencv.opencv_core.Size;
 import org.bytedeco.opencv.global.opencv_core;
-import org.bytedeco.javacv.*;
-import org.bytedeco.opencv.opencv_core.Mat;
-import org.bytedeco.opencv.global.opencv_imgcodecs;  // For reading images
-import org.bytedeco.opencv.global.opencv_core;  // For Core functions like addWeighted
-import org.bytedeco.opencv.global.opencv_highgui;  // For HighGui (display images)
-
-// import org.bytedeco.opencv.global.openIm
+// import org.bytedeco.javacv.*;
+// import org.bytedeco.opencv.opencv_core.Mat;
+import org.bytedeco.opencv.global.opencv_imgcodecs; // For reading images
+// import org.bytedeco.opencv.global.opencv_core; // For Core functions like addWeighted
+import org.bytedeco.opencv.global.opencv_highgui; // For HighGui (display images)
 
 import org.bytedeco.opencv.global.opencv_imgproc;
-// import org.bytedeco.opencv.opencv_core.Ma
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
-import org.opencv.core.Core;
 // import org.opencv.core.Core;
-import org.opencv.highgui.HighGui;
+// import org.opencv.highgui.HighGui;
 // import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgcodecs.Imgcodecs;
 
 public class FacialCapture {
     private static Connection dbConnection;
@@ -109,7 +105,7 @@ public class FacialCapture {
 
         // Read all images
         for (File file : files) {
-            System.out.println("Reading file: " + file.getAbsolutePath());  // Print image paths
+            System.out.println("Reading file: " + file.getAbsolutePath()); // Print image paths
             Mat img = opencv_imgcodecs.imread(file.getAbsolutePath(), 1);
             if (!img.empty()) {
                 images.add(img);
@@ -149,21 +145,22 @@ public class FacialCapture {
             List<Mat> frameList = new ArrayList<>();
             long startTime = System.currentTimeMillis();
 
-            // Collect frames for 1 second
             while (System.currentTimeMillis() - startTime < 1000) {
-                // System.out.println("i: " + i);
                 org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
                 if (grabbedFrame != null) {
                     Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
                     frameList.add(frameMatrix);
                 }
-                Thread.sleep(33); // ~30fps, adjust based on actual frame rate
+                // Thread.sleep(1); 
             }
+            System.out.println("frameList.length: " + frameList.size());
 
-            // Now detect faces on all collected frames
             List<Rect> frozenFaces = new ArrayList<>();
             for (Mat frameMatrix : frameList) {
-                // Detect faces and get bounding rectangles
+                if (frameMatrix.empty()) {
+                    System.out.println("Skipped an empty frame.");
+                    continue;
+                }
                 List<Rect> detectedFaces = detectFaces(frameMatrix);
 
                 for (Rect rect : detectedFaces) {
@@ -178,75 +175,91 @@ public class FacialCapture {
             if (newFrozenFaces.isEmpty()) {
                 JOptionPane.showMessageDialog(null,
                         "No face detected! Please ensure your face is visible in the camera.");
-                return; // Exit if no faces are detected
+                return;
             }
 
-            // Mat averageImage = computeAverageImage(frameList);
-            Mat accumulatedImage = new Mat();
+            List<Mat> images = new ArrayList<>();
 
             System.out.println("frameList.size(): " + frameList.size());
-            System.out.println("accumulatedImage size one: " + accumulatedImage.size());
-            // Loop through the frameList to accumulate pixel values
             for (int i = 0; i < frameList.size(); i++) {
-                Mat currentFrame = frameList.get(i);
+                images.add(frameList.get(i));
+            }
+
+            org.bytedeco.opencv.opencv_core.Mat avgImage = (org.bytedeco.opencv.opencv_core.Mat) images.get(0).clone();
+            if (avgImage.empty()) {
+                System.out.println("Error: avgImage is empty and cannot be used as a reference.");
+                return;
+            }
+
+            for (int i = 1; i < images.size(); i++) {
+                org.bytedeco.opencv.opencv_core.Mat currentImage = (org.bytedeco.opencv.opencv_core.Mat) images.get(i);
+
+                if (currentImage.empty()) {
+                    System.out.println("Skipped image: currentImage is empty.");
+                    continue;
+                }
+
+                if (currentImage.channels() != avgImage.channels()) {
+                    opencv_imgproc.cvtColor(currentImage, currentImage, opencv_imgproc.COLOR_BGR2BGRA);
+                }
+
+                if (currentImage.depth() != avgImage.depth()) {
+                    currentImage.convertTo(currentImage, avgImage.depth());
+                }
+
+                if (!currentImage.isContinuous() || !avgImage.isContinuous()) {
+                    System.out.println("One of the images is not continuous!");
+                    // return;
+                }
+
+                opencv_imgproc.resize(currentImage, currentImage, avgImage.size());
+                opencv_imgproc.resize(currentImage, currentImage, new Size(avgImage.cols(), avgImage.rows()));
+
                 double alpha = 1.0 / (i + 1);
                 double beta = 1.0 - alpha;
-                // Convert to the same type as the accumulated image if necessary
-                if (accumulatedImage.empty()) {
-                    currentFrame.copyTo(accumulatedImage);
-                } else {
-                    opencv_core.addWeighted(accumulatedImage, alpha, currentFrame, beta, 0.0, accumulatedImage);
-                }
+                opencv_core.addWeighted(currentImage, alpha, avgImage, beta, 0.0, avgImage);
+
             }
-            System.out.println("accumulatedImage size two: " + accumulatedImage.size());
 
-            // Convert the average image to BufferedImage for display
-            BufferedImage averagedBufferedImage = new Java2DFrameConverter().convert(
-                    new OpenCVFrameConverter.ToMat().convert(accumulatedImage));
-
-            // Draw rectangles on the detected faces for user reference
+            System.out.println(newFrozenFaces.size());
             for (Rect rect : newFrozenFaces) {
+                // System.out.println(rect.);
                 opencv_imgproc.rectangle(
-                        frameList.get(0), // Use the first frame as the reference
+                        avgImage, 
                         rect,
-                        new Scalar(0, 255, 0, 0)); // Green color for highlighting
+                        new Scalar(0, 255, 0, 0),
+                        2, 
+                        opencv_imgproc.LINE_8, 
+                        0 
+                ); 
             }
 
-            // Convert Mat back to BufferedImage for display
             BufferedImage image = new Java2DFrameConverter()
-                    .convert(new OpenCVFrameConverter.ToMat().convert(frameList.get(0)));
+                    .convert(new OpenCVFrameConverter.ToMat().convert(avgImage));
 
-            System.out.println("accumulatedImage size three: " + accumulatedImage.size());
-
-            // Show the image with detected faces in a selection window
             JFrame selectionFrame = new JFrame("Select a Face");
             selectionFrame.setSize(image.getWidth(), image.getHeight());
-            JLabel imageLabel = new JLabel(new ImageIcon(averagedBufferedImage));
+            JLabel imageLabel = new JLabel(new ImageIcon(image));
             selectionFrame.add(imageLabel);
             selectionFrame.setVisible(true);
 
-            // Calculate the scaling factor
             double scaleX = (double) image.getWidth() / frameList.get(0).cols();
             double scaleY = (double) image.getHeight() / frameList.get(0).rows();
 
-            // Add mouse listener for face selection using frozenFaces
             imageLabel.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
                     int x = e.getX();
                     int y = e.getY();
 
-                    // Adjust mouse coordinates to match original image size
                     int adjustedX = (int) (x * scaleX);
                     int adjustedY = (int) (y * scaleY);
 
-                    // Determine if click is inside any frozen face rectangle
                     for (Rect rect : newFrozenFaces) {
                         if (adjustedX >= rect.x() && adjustedX <= (rect.x() + rect.width()) &&
                                 adjustedY >= rect.y() && adjustedY <= (rect.y() + rect.height())) {
-                            Mat selectedFace = new Mat(frameList.get(0), rect);
+                            Mat selectedFace = new Mat(avgImage, rect);
 
-                            // Optionally, process the selected face (recognition, etc.)
                             byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
                             String isRecognized = DatabaseHelper.isFaceRecognized(dbConnection, embedding);
                             if (isRecognized != null && !isRecognized.isEmpty()) {
@@ -255,9 +268,6 @@ public class FacialCapture {
                                 JOptionPane.showMessageDialog(null, "Face not recognized.");
                             }
 
-                            // Dispose of the selection window after processing
-                            // selectionFrame.dispose();
-                            // return;
                         }
                     }
 
@@ -284,7 +294,7 @@ public class FacialCapture {
                         // Replace the smaller rectangle with the larger one
                         validatedRectangles.set(i, rect);
                     }
-                    shouldAdd = false; // Avoid adding duplicate
+                    shouldAdd = false;
                     break;
                 }
             }
@@ -338,7 +348,11 @@ public class FacialCapture {
                     opencv_imgproc.rectangle(
                             mat,
                             rect,
-                            new Scalar(0, 255, 0, 0)); // Green color for highlighting
+                            new Scalar(0, 255, 0, 0), // Color (Green)
+                            2, // Thickness
+                            opencv_imgproc.LINE_8, // Line type
+                            0 // Shift
+                    ); 
                 }
 
                 // Convert Mat back to BufferedImage for display
