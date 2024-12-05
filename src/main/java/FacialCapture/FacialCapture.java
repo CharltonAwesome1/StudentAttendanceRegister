@@ -90,7 +90,6 @@ public class FacialCapture {
                     frameList.add(frameMatrix);
                 }
                 Thread.sleep(33); // ~30fps, adjust based on actual frame rate
-                System.out.println("startTime: " + startTime);
             }
 
             // Now detect faces on all collected frames
@@ -117,25 +116,32 @@ public class FacialCapture {
             // Mat averageImage = computeAverageImage(frameList);
             Mat accumulatedImage = new Mat();
 
+            System.out.println("frameList.size(): " + frameList.size());
+            System.out.println("accumulatedImage size one: " + accumulatedImage.size());
             // Loop through the frameList to accumulate pixel values
             for (int i = 0; i < frameList.size(); i++) {
                 Mat currentFrame = frameList.get(i);
-
+                double alpha = 1.0/(i + 1);
+                double beta = 1.0 - alpha;
                 // Convert to the same type as the accumulated image if necessary
                 if (accumulatedImage.empty()) {
                     currentFrame.copyTo(accumulatedImage);
                 } else {
-                    opencv_core.add(accumulatedImage, currentFrame, accumulatedImage);
+                    // opencv_core.add(accumulatedImage, currentFrame, accumulatedImage);
+                    // opencv_core.addWeighted(accumulatedImage, 1.0, currentFrame, 1.0, 0.0, accumulatedImage);
+                    opencv_core.addWeighted(accumulatedImage, alpha, currentFrame, beta, 0.0, accumulatedImage);
                 }
             }
+            System.out.println("accumulatedImage size two: " + accumulatedImage.size());
+
 
             // Divide the accumulated image by the total number of frames to calculate the average
-            Mat averageImage = new Mat();
-            accumulatedImage.convertTo(averageImage, accumulatedImage.type());//, 1.0 / frameList.size(), 0.5);
+            // Mat averageImage = new Mat();
+            // accumulatedImage.convertTo(averageImage, accumulatedImage.type(), 1.0 / frameList.size(), 0.5);
 
             // Convert the average image to BufferedImage for display
             BufferedImage averagedBufferedImage = new Java2DFrameConverter().convert(
-                    new OpenCVFrameConverter.ToMat().convert(averageImage));
+                    new OpenCVFrameConverter.ToMat().convert(accumulatedImage));
 
             // Draw rectangles on the detected faces for user reference
             for (Rect rect : newFrozenFaces) {
@@ -148,6 +154,10 @@ public class FacialCapture {
             // Convert Mat back to BufferedImage for display
             BufferedImage image = new Java2DFrameConverter()
                     .convert(new OpenCVFrameConverter.ToMat().convert(frameList.get(0)));
+
+            System.out.println("accumulatedImage size three: " + accumulatedImage.size());
+            // System.out.println("averagedBufferedImage size one: " + averagedBufferedImage);
+
 
             // Show the image with detected faces in a selection window
             JFrame selectionFrame = new JFrame("Select a Face");
