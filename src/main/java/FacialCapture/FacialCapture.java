@@ -6,6 +6,7 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.File;
 import java.sql.Connection;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -16,10 +17,22 @@ import org.bytedeco.opencv.opencv_core.Rect;
 import org.bytedeco.opencv.opencv_core.RectVector;
 import org.bytedeco.opencv.opencv_core.Scalar;
 import org.bytedeco.opencv.global.opencv_core;
+import org.bytedeco.javacv.*;
+import org.bytedeco.opencv.opencv_core.Mat;
+import org.bytedeco.opencv.global.opencv_imgcodecs;  // For reading images
+import org.bytedeco.opencv.global.opencv_core;  // For Core functions like addWeighted
+import org.bytedeco.opencv.global.opencv_highgui;  // For HighGui (display images)
+
+// import org.bytedeco.opencv.global.openIm
 
 import org.bytedeco.opencv.global.opencv_imgproc;
 // import org.bytedeco.opencv.opencv_core.Ma
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
+import org.opencv.core.Core;
+// import org.opencv.core.Core;
+import org.opencv.highgui.HighGui;
+// import org.opencv.imgcodecs.Imgcodecs;
+import org.opencv.imgcodecs.Imgcodecs;
 
 public class FacialCapture {
     private static Connection dbConnection;
@@ -31,7 +44,7 @@ public class FacialCapture {
         // Initialize resources
         try {
             System.out.println("Initializing database connection...");
-            dbConnection = DatabaseHelper.connect();
+            // dbConnection = DatabaseHelper.connect();
             System.out.println("Database connection established.");
 
             System.out.println("Initializing camera grabber...");
@@ -61,19 +74,74 @@ public class FacialCapture {
         JPanel buttonPanel = new JPanel();
         JButton captureButton = new JButton("Capture Face");
         JButton recognizeButton = new JButton("Recognize Face");
+        JButton buttonThree = new JButton("buttonThree");
         buttonPanel.add(captureButton);
         buttonPanel.add(recognizeButton);
+        buttonPanel.add(buttonThree);
         frame.add(buttonPanel, BorderLayout.SOUTH);
 
         // Add button actions
         captureButton.addActionListener(e -> captureFace());
         recognizeButton.addActionListener(e -> recognizeFaceTwo());
+        buttonThree.addActionListener(e -> buttonThreeMethod());
 
         // Start updating the camera feed
         new Thread(FacialCapture::updateCameraFeed).start();
 
         frame.setVisible(true);
 
+    }
+
+    private static void buttonThreeMethod() {
+
+        // Path to the folder containing images
+        File dir = new File("src/main/resources/happy_faces/");
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".png"));
+        System.out.println("dir: " + dir.getAbsolutePath());
+        System.out.println("files.length: " + files.length);
+
+        if (files == null || files.length == 0) {
+            System.out.println("No .png images found in the specified folder.");
+            return;
+        }
+
+        List<Mat> images = new ArrayList<>();
+
+        // Read all images
+        for (File file : files) {
+            System.out.println("Reading file: " + file.getAbsolutePath());  // Print image paths
+            Mat img = opencv_imgcodecs.imread(file.getAbsolutePath(), 1);
+            if (!img.empty()) {
+                images.add(img);
+            }
+        }
+
+        if (images.isEmpty()) {
+            System.out.println("No valid images found.");
+            return;
+        }
+
+        Mat avgImage = images.get(0);
+
+        // Compute weighted average for subsequent images
+        for (int i = 1; i < images.size(); i++) {
+            Mat currentImage = images.get(i);
+            double alpha = 1.0 / (i + 1);
+            double beta = 1.0 - alpha;
+
+            // Calculate weighted sum of the images
+            opencv_core.addWeighted(currentImage, alpha, avgImage, beta, 0.0, avgImage);
+        }
+
+        // Save the resulting image
+        opencv_imgcodecs.imwrite(dir + "avg_happy_face.png", avgImage);
+
+        // Read the saved average image for displaying
+        Mat resultImage = opencv_imgcodecs.imread(dir + "avg_happy_face.png");
+
+        opencv_highgui.imshow("Average Happy Face", resultImage);
+        opencv_highgui.waitKey(0);
+        opencv_highgui.destroyAllWindows();
     }
 
     private static void recognizeFaceTwo() {
@@ -121,23 +189,16 @@ public class FacialCapture {
             // Loop through the frameList to accumulate pixel values
             for (int i = 0; i < frameList.size(); i++) {
                 Mat currentFrame = frameList.get(i);
-                double alpha = 1.0/(i + 1);
+                double alpha = 1.0 / (i + 1);
                 double beta = 1.0 - alpha;
                 // Convert to the same type as the accumulated image if necessary
                 if (accumulatedImage.empty()) {
                     currentFrame.copyTo(accumulatedImage);
                 } else {
-                    // opencv_core.add(accumulatedImage, currentFrame, accumulatedImage);
-                    // opencv_core.addWeighted(accumulatedImage, 1.0, currentFrame, 1.0, 0.0, accumulatedImage);
                     opencv_core.addWeighted(accumulatedImage, alpha, currentFrame, beta, 0.0, accumulatedImage);
                 }
             }
             System.out.println("accumulatedImage size two: " + accumulatedImage.size());
-
-
-            // Divide the accumulated image by the total number of frames to calculate the average
-            // Mat averageImage = new Mat();
-            // accumulatedImage.convertTo(averageImage, accumulatedImage.type(), 1.0 / frameList.size(), 0.5);
 
             // Convert the average image to BufferedImage for display
             BufferedImage averagedBufferedImage = new Java2DFrameConverter().convert(
@@ -156,8 +217,6 @@ public class FacialCapture {
                     .convert(new OpenCVFrameConverter.ToMat().convert(frameList.get(0)));
 
             System.out.println("accumulatedImage size three: " + accumulatedImage.size());
-            // System.out.println("averagedBufferedImage size one: " + averagedBufferedImage);
-
 
             // Show the image with detected faces in a selection window
             JFrame selectionFrame = new JFrame("Select a Face");
@@ -210,20 +269,6 @@ public class FacialCapture {
         }
     }
 
-    // private static Mat computeAverageImage(List<Mat> frameList) {
-    //     Mat averageImage = new Mat(frameList.get(0).size(), frameList.get(0).type(), new Scalar(0));
-
-    //     // Accumulate all the frames into averageImage
-    //     for (Mat frame : frameList) {
-    //         opencv_core.add(averageImage, frame, averageImage); // Element-wise addition
-    //     }
-
-    //     // Divide by the number of frames to compute the average
-    //     opencv_core.divide(averageImage, new Scalar(frameList.size()), averageImage);
-
-    //     return averageImage;
-    // }
-
     private static List<Rect> validateFaceRectangles(List<Rect> rectangles) {
         List<Rect> validatedRectangles = new ArrayList<>();
 
@@ -251,130 +296,6 @@ public class FacialCapture {
 
         return validatedRectangles; // Return the validated list
     }
-
-    // private static void recognizeFaceTwo() {
-    //     try {
-    //         org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
-    //         if (grabbedFrame != null) {
-    //             Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
-
-    //             // Detect faces and get bounding rectangles
-    //             List<Rect> detectedFaces = detectFaces(frameMatrix);
-
-    //             // Clone detected face rectangles to freeze the state
-    //             List<Rect> frozenFaces = new ArrayList<>();
-    //             for (Rect rect : detectedFaces) {
-    //                 System.out.println("Cloning Rect: x=" + rect.x() + " y=" + rect.y() +
-    //                         " width=" + rect.width() + " height=" + rect.height());
-    //                 // frozenFaces.add(new Rect(rect)); // Explicitly clone each Rect
-    //                 frozenFaces.add(new Rect(rect.x(), rect.y(), rect.width(), rect.height()));
-
-    //             }
-
-    //             if (frozenFaces.isEmpty()) {
-    //                 JOptionPane.showMessageDialog(null,
-    //                         "No face detected! Please ensure your face is visible in the camera.");
-    //                 return; // Exit if no faces are detected
-    //             }
-
-    //             // Draw rectangles on the detected faces for user reference
-
-    //             for (Rect rect : frozenFaces) {
-    //                 opencv_imgproc.rectangle(
-    //                         frameMatrix,
-    //                         rect,
-    //                         new Scalar(0, 255, 0, 0)); // Green color for highlighting
-    //             }
-
-    //             // Convert Mat back to BufferedImage for display
-    //             BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(frameMatrix));
-
-    //             // Show the image with detected faces in a selection window
-    //             JFrame selectionFrame = new JFrame("Select a Face");
-    //             // selectionFrame.setSize(800, 600);
-    //             selectionFrame.setSize(image.getWidth(), image.getHeight());
-    //             selectionFrame.setResizable(false);
-    //             JLabel imageLabel = new JLabel(new ImageIcon(image));
-    //             selectionFrame.add(imageLabel);
-    //             selectionFrame.setVisible(true);
-
-    //             // Calculate the scaling factor
-    //             double scaleX = (double) image.getWidth() / frameMatrix.cols();
-    //             double scaleY = (double) image.getHeight() / frameMatrix.rows();
-    //             // image.rele
-
-    //             // Add mouse listener for face selection using frozenFaces
-    //             imageLabel.addMouseListener(new MouseAdapter() {
-    //                 @Override
-    //                 public void mouseClicked(MouseEvent e) {
-    //                     int x = e.getX();
-    //                     int y = e.getY();
-
-    //                     System.out.println("Mouse click detected: x=" + x + ", y=" + y);
-
-    //                     // Adjust mouse coordinates to match original image size
-    //                     int adjustedX = (int) (x * scaleX);
-    //                     int adjustedY = (int) (y * scaleY);
-
-    //                     System.out.println("Adjusted click: x=" + adjustedX + ", y=" + adjustedY);
-    //                     System.out.println("frozenFaces length: " + frozenFaces.size());
-
-    //                     // Determine if click is inside any frozen face rectangle
-    //                     for (Rect rect : frozenFaces) {
-    //                         // Print the current rect details and valid range
-    //                         System.out.println("Checking Rect: x=" + rect.x() + ", y=" + rect.y() +
-    //                                 ", width=" + rect.width() + ", height=" + rect.height());
-    //                         System.out.println("Valid X range: " + rect.x() + " to " + (rect.x() + rect.width()));
-    //                         System.out.println("Valid Y range: " + rect.y() + " to " + (rect.y() + rect.height()));
-
-    //                         // Individual boundary checks
-    //                         boolean withinXBounds = adjustedX >= rect.x() && adjustedX <= (rect.x() + rect.width());
-    //                         boolean withinYBounds = adjustedY >= rect.y() && adjustedY <= (rect.y() + rect.height());
-
-    //                         // Print the results of boundary checks
-    //                         System.out.println("Boundary check results: X=" + withinXBounds + ", Y=" + withinYBounds);
-
-    //                         // Final condition to determine if the click is inside the rectangle
-    //                         if (withinXBounds && withinYBounds) {
-    //                             System.out.println("Face Selected: Rect[x=" + rect.x() +
-    //                                     ", y=" + rect.y() + ", width=" + rect.width() +
-    //                                     ", height=" + rect.height() + "]");
-    //                             // System.out.println("Face Selected: " + rect);
-    //                             Mat selectedFace = new Mat(frameMatrix, rect);
-
-    //                             // Pass the selected Mat to generateEmbedding()
-    //                             byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
-    //                             String isRecognized = DatabaseHelper.isFaceRecognized(dbConnection, embedding);
-    //                             if (isRecognized != null && !isRecognized.isEmpty()) {
-    //                                 String formattedString = String.format("Face recognized as \"%s\"", isRecognized);
-    //                                 JOptionPane.showMessageDialog(null, formattedString);
-    //                                 return;
-    //                             } else {
-    //                                 JOptionPane.showMessageDialog(null, "Face not recognized.");
-    //                             }
-
-    //                             // Optionally store or use the embedding
-    //                             System.out.println("Generated embedding for selected face.");
-    //                             // JOptionPane.showMessageDialog(selectionFrame, "Face Selected: " + rect);
-
-    //                             // Optional: Dispose of the selection window
-    //                             selectionFrame.dispose();
-    //                             // return;
-    //                             return;
-    //                         }
-    //                     }
-
-    //                     System.out.println("No face selected.");
-    //                     JOptionPane.showMessageDialog(selectionFrame, "No face selected.");
-    //                 }
-    //             });
-    //             // mat.close();
-
-    //         }
-    //     } catch (Exception e) {
-    //         e.printStackTrace();
-    //     }
-    // }
 
     private static void updateCameraFeed() {
 
