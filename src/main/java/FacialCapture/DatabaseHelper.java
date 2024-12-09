@@ -93,10 +93,6 @@ public class DatabaseHelper {
         String query = "INSERT INTO faces (embedding) VALUES (?)";
 
         try (PreparedStatement statement = connection.prepareStatement(query)) {
-            // char[] thing = nembedding
-            // String receivedData = new String(embedding);
-            // System.out.println("embedding");
-            // System.out.println(receivedData);
             statement.setBytes(1, embedding);
             statement.executeUpdate();
             System.out.println("Face embedding stored in the database.");
@@ -107,11 +103,15 @@ public class DatabaseHelper {
     }
 
     public static void storeEmbedding(Connection connection, byte[] embedding, String name) {
-        String query = "INSERT INTO faces (embedding, name) VALUES (?, ?)";
+        // String query = "INSERT INTO faces (embedding, name) VALUES (?, ?)";
+        String query = "INSERT INTO faces (thing, name, embedding) VALUES (?, ?, ?)";
+        byte[] thingy = null;
 
         try (PreparedStatement statement = connection.prepareStatement(query)) {
             statement.setBytes(1, embedding);
             statement.setString(2, name);
+            statement.setBytes(3, thingy);
+
             statement.executeUpdate();
             System.out.println("Face embedding and name stored in the database.");
         } catch (SQLException e) {
