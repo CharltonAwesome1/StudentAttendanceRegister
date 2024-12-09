@@ -44,6 +44,8 @@ public class FacialCapture {
     private static JButton captureButton;
     private static JButton recognizeButton;
     private static JButton buttonThree;
+    private static JButton buttonFour;
+    private static JButton buttonFive;
 
     public static void main(String[] args) {
         try {
@@ -88,21 +90,240 @@ public class FacialCapture {
         captureButton = new JButton("Capture Face");
         recognizeButton = new JButton("Recognize Face");
         buttonThree = new JButton("buttonThree");
-        buttonPanel.add(nameLabel);
+        buttonFour = new JButton("buttonFour");
+        buttonFive = new JButton("Find Face");
+        // buttonPanel.add(nameLabel);
         buttonPanel.add(nameTextField);
         buttonPanel.add(captureButton);
         buttonPanel.add(recognizeButton);
         buttonPanel.add(buttonThree);
+        buttonPanel.add(buttonFour);
+        buttonPanel.add(buttonFive);
 
         frame.add(buttonPanel, BorderLayout.SOUTH);
 
         captureButton.addActionListener(e -> captureFace());
         recognizeButton.addActionListener(e -> recognizeFaceTwo());
         buttonThree.addActionListener(e -> buttonThreeMethod());
+        buttonFour.addActionListener(e -> buttonFourMethod());
+        buttonFive.addActionListener(e -> compareCaptureFaceToSavedImages());
 
         new Thread(FacialCapture::updateCameraFeed).start();
 
         frame.setVisible(true);
+
+    }
+
+    private static void compareCaptureFaceToSavedImages() {
+
+        try {
+            org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
+            if (frame != null) {
+                Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
+
+                List<Rect> detectedFaces = detectFaces(mat);
+                // System.out.println("detectedFaces.size(): " + detectedFaces.size());
+
+                if (detectedFaces.isEmpty()) {
+                    JOptionPane.showMessageDialog(null,
+                            "No face detected! Please ensure your face is visible in the camera.");
+                    return;
+                }
+
+                for (Rect rect : detectedFaces) {
+                    opencv_imgproc.rectangle(
+                            mat,
+                            rect,
+                            new Scalar(0, 255, 0, 0),
+                            2,
+                            opencv_imgproc.LINE_8,
+                            0);
+                }
+
+                BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(mat));
+
+                JFrame selectionFrame = new JFrame("Select a Face");
+                selectionFrame.setSize(image.getWidth(), image.getHeight());
+                JLabel imageLabel = new JLabel(new ImageIcon(image));
+                selectionFrame.add(imageLabel);
+                selectionFrame.setVisible(true);
+
+                double scaleX = (double) mat.cols() / image.getWidth();
+                double scaleY = (double) mat.rows() / image.getHeight();
+
+                imageLabel.addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent e) {
+                        // String name = nameTextField.getText().trim();
+
+                        // if (name.isEmpty()) {
+                        //     System.out.println("Name cannot be empty");
+                        //     return;
+                        // }
+
+                        File dir = new File("src/main/resources/happy_faces/faces_test/");
+                        File[] files = dir.listFiles((d, fileName) -> fileName.toLowerCase().endsWith(".jpg"));
+                        System.out.println("dir: " + dir.getAbsolutePath());
+                        System.out.println("files.length: " + files.length);
+
+                        if (files == null || files.length == 0) {
+                            System.out.println("No .png images found in the specified folder.");
+                            return;
+                        }
+
+                        List<Mat> images = new ArrayList<>();
+
+                        for (File file : files) {
+                            System.out.println("Reading file: " + file.getAbsolutePath());
+                            Mat img = opencv_imgcodecs.imread(file.getAbsolutePath(), 1);
+                            if (!img.empty()) {
+                                images.add(img);
+                            }
+                        }
+
+                        if (images.isEmpty()) {
+                            System.out.println("No valid images found.");
+                            return;
+                        }
+
+                        int x = e.getX();
+                        int y = e.getY();
+
+                        int adjustedX = (int) (x * scaleX);
+                        int adjustedY = (int) (y * scaleY);
+                        System.out.println("Mouse clicked at: (" + e.getX() + ", " + e.getY() + ")");
+                        System.out.println("Scaling factors: scaleX=" + scaleX + ", scaleY=" + scaleY);
+                        System.out.println("Adjusted coordinates: adjustedX=" + adjustedX + ", adjustedY=" + adjustedY);
+
+                        for (Rect rect : detectedFaces) {
+                            System.out.println("Detected face: x=" + rect.x() + ", y=" + rect.y() +
+                                    ", width=" + rect.width() + ", height=" + rect.height());
+                            System.out.println("Face region: x=" + rect.x() + "-" + (rect.x() + rect.width()) +
+                                    ", y=" + rect.y() + "-" + (rect.y() + rect.height()));
+                        }
+
+                        for (Rect rect : detectedFaces) {
+
+                            if ((adjustedX >= rect.x() &&
+                                    adjustedX <= rect.x() + rect.width() &&
+                                    adjustedY >= rect.y() &&
+                                    adjustedY <= rect.y() + rect.height()) == false) {
+                                continue;
+                            }
+
+                            opencv_imgproc.rectangle(mat, rect, new Scalar(255, 0, 0, 0), 3, opencv_imgproc.LINE_8, 0);
+
+                            Mat selectedFace = new Mat(mat, rect);
+                            // Mat baseImageForCompareOne = images.get(1);
+                            Mat resizedFace = new Mat();
+                            opencv_imgproc.resize(selectedFace, resizedFace, new Size(128, 128)); // Resize face to 128x128 pixels
+                            byte[] capturedEmbedding = FaceProcessor.generateEmbedding(resizedFace);
+                            System.out.println("capturedEmbedding.length:" + capturedEmbedding.length);
+                            // byte[] capturedEmbedding = FaceProcessor.generateEmbedding(selectedFace);
+
+                            for (int i = 0; i < images.size(); i++) {
+                                Mat currentImage = images.get(i);
+
+                                byte[] embedding = FaceProcessor.generateEmbedding(currentImage);
+
+                                double distance = DatabaseHelper.calculateDistance(embedding, capturedEmbedding);
+                                double similarity = DatabaseHelper.calculateCosineSimilarity(embedding,
+                                        capturedEmbedding);
+
+                                System.out.println("Cosine similarity: " + similarity);
+                                System.out.println("distance: " + distance);
+                                System.out.println();
+                            }
+
+                        }
+                    }
+                });
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+
+    }
+
+    private static void buttonFourMethod() {
+
+        File dir = new File("src/main/resources/happy_faces/faces_test/");
+        File[] files = dir.listFiles((d, name) -> name.toLowerCase().endsWith(".jpg"));
+        System.out.println("dir: " + dir.getAbsolutePath());
+        System.out.println("files.length: " + files.length);
+
+        if (files == null || files.length == 0) {
+            System.out.println("No .png images found in the specified folder.");
+            return;
+        }
+
+        List<Mat> images = new ArrayList<>();
+
+        for (File file : files) {
+            System.out.println("Reading file: " + file.getAbsolutePath());
+            Mat img = opencv_imgcodecs.imread(file.getAbsolutePath(), 1);
+            if (!img.empty()) {
+                images.add(img);
+            }
+        }
+
+        if (images.isEmpty()) {
+            System.out.println("No valid images found.");
+            return;
+        }
+
+        // Mat avgImage = images.get(0);
+
+        // for (int i = 1; i < images.size(); i++) {
+        //     Mat currentImage = images.get(i);
+        //     double alpha = 1.0 / (i + 1);
+        //     double beta = 1.0 - alpha;
+
+        //     opencv_core.addWeighted(currentImage, alpha, avgImage, beta, 0.0, avgImage);
+        // }
+
+        // opencv_imgcodecs.imwrite(dir + "avg_happy_face.png", avgImage);
+
+        // Mat resultImage = opencv_imgcodecs.imread(dir + "avg_happy_face.png");
+
+        // opencv_highgui.imshow("Average Happy Face", resultImage);
+        // opencv_highgui.waitKey(0);
+        // opencv_highgui.destroyAllWindows();
+
+        Mat baseImageForCompareOne = images.get(1);
+        byte[] embeddingTwo = FaceProcessor.generateEmbedding(baseImageForCompareOne);
+
+        for (int i = 0; i < images.size(); i++) {
+            Mat currentImage = images.get(i);
+            // double alpha = 1.0 / (i + 1);
+            // double beta = 1.0 - alpha;
+            // BufferedImage image = new Java2DFrameConverter()
+            //         .convert(new OpenCVFrameConverter.ToMat().convert(currentImage));
+
+            // JFrame selectionFrame = new JFrame("Select a Face");
+            // selectionFrame.setSize(image.getWidth(), image.getHeight());
+            // selectionFrame.setLocationRelativeTo(null);
+            // JLabel imageLabel = new JLabel(new ImageIcon(image));
+            // selectionFrame.add(imageLabel);
+            // selectionFrame.setVisible(true);
+            // JOptionPane.showMessageDialog(null, image, null, i);
+            // Mat selectedFace = new Mat(image);
+
+            byte[] embedding = FaceProcessor.generateEmbedding(currentImage);
+
+            double distance = DatabaseHelper.calculateDistance(embedding, embeddingTwo);
+            double similarity = DatabaseHelper.calculateCosineSimilarity(embedding, embeddingTwo);
+
+            // System.out.println(name);
+            System.out.println("Cosine similarity: " + similarity);
+            System.out.println("distance: " + distance);
+            // System.out.println((similarity > 0.4) + " " + (distance < 150));
+            System.out.println();
+
+            // System.out.println(embedding.length);
+            // System.out.println(embedding.);
+            // opencv_core.addWeighted(currentImage, alpha, avgImage, beta, 0.0, avgImage);
+        }
 
     }
 
@@ -353,6 +574,8 @@ public class FacialCapture {
                 }
 
                 for (Rect rect : detectedFaces) {
+                    // System.out.println(rect.x());
+                    // System.out.println(rect.y());
                     opencv_imgproc.rectangle(
                             mat,
                             rect,
@@ -365,7 +588,8 @@ public class FacialCapture {
                 BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(mat));
 
                 JFrame selectionFrame = new JFrame("Select a Face");
-                selectionFrame.setSize(800, 600);
+                // selectionFrame.setSize(800, 600);
+                selectionFrame.setSize(image.getWidth(), image.getHeight());
                 JLabel imageLabel = new JLabel(new ImageIcon(image));
                 selectionFrame.add(imageLabel);
                 selectionFrame.setVisible(true);
@@ -373,10 +597,10 @@ public class FacialCapture {
                 // double scaleX = (double) image.getWidth() / mat.cols();
                 // double scaleY = (double) image.getHeight() / mat.rows();
 
-                System.out.println("image.getWidth(): " + image.getWidth());
-                System.out.println("image.getHeight(): " + image.getHeight());
-                System.out.println("mat.cols() " + mat.cols());
-                System.out.println("mat.rows() " + mat.rows());
+                // System.out.println("image.getWidth(): " + image.getWidth());
+                // System.out.println("image.getHeight(): " + image.getHeight());
+                // System.out.println("mat.cols() " + mat.cols());
+                // System.out.println("mat.rows() " + mat.rows());
                 double scaleX = (double) mat.cols() / image.getWidth();
                 double scaleY = (double) mat.rows() / image.getHeight();
 
@@ -385,10 +609,10 @@ public class FacialCapture {
                     public void mouseClicked(MouseEvent e) {
                         String name = nameTextField.getText().trim();
                         boolean faceSelected = true;
-                        System.out.println("image.getWidth(): " + image.getWidth());
-                        System.out.println("image.getHeight(): " + image.getHeight());
-                        System.out.println("mat.cols() " + mat.cols());
-                        System.out.println("mat.rows() " + mat.rows());
+                        // System.out.println("image.getWidth(): " + image.getWidth());
+                        // System.out.println("image.getHeight(): " + image.getHeight());
+                        // System.out.println("mat.cols() " + mat.cols());
+                        // System.out.println("mat.rows() " + mat.rows());
                         // int counter = 0;
 
                         if (name.isEmpty()) {
@@ -398,45 +622,37 @@ public class FacialCapture {
 
                         int x = e.getX();
                         int y = e.getY();
-                        System.out.println("e.getX()" + e.getX());
-                        System.out.println("e.getY()" + e.getY());
 
-                        // int adjustedX = (int) (x / scaleX);
-                        // int adjustedY = (int) (y / scaleY);
                         int adjustedX = (int) (x * scaleX);
                         int adjustedY = (int) (y * scaleY);
+                        System.out.println("Mouse clicked at: (" + e.getX() + ", " + e.getY() + ")");
+                        System.out.println("Scaling factors: scaleX=" + scaleX + ", scaleY=" + scaleY);
+                        System.out.println("Adjusted coordinates: adjustedX=" + adjustedX + ", adjustedY=" + adjustedY);
 
                         for (Rect rect : detectedFaces) {
-                            // System.out.println("rect: " + detectedFaces);
-                            System.out.println("adjustedX: " + adjustedX);
-                            System.out.println(rect.x());
-                            // System.out.println(rect.size());
-                            System.out.println("adjustedY: " + adjustedY);
-                            System.out.println(rect.y());
-                            System.out.println(rect.width());
-                            System.out.println(rect.height());
-                            System.out.println("detectedFaces.length: " + detectedFaces.size());
-                            // if (adjustedX >= rect.x() &&
-                            //         adjustedX <= rect.x() + rect.width() &&
-                            //         adjustedY >= rect.y() &&
-                            //         adjustedY <= rect.y() + rect.height()) {
+                            System.out.println("Detected face: x=" + rect.x() + ", y=" + rect.y() +
+                                    ", width=" + rect.width() + ", height=" + rect.height());
+                            System.out.println("Face region: x=" + rect.x() + "-" + (rect.x() + rect.width()) +
+                                    ", y=" + rect.y() + "-" + (rect.y() + rect.height()));
+                        }
 
-                            //     faceSelected = true;
-                            //     JOptionPane.showMessageDialog(selectionFrame,
-                            //             "Face Selected: " + rect);
-                            // Mat selectedFace = new Mat(mat, rect);
+                        for (Rect rect : detectedFaces) {
 
-                            // byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
-                            // byte[] embedding = FaceProcessor.generateEmbedding(new Mat(mat, rect));
+                            // opencv_imgproc.rectangle(mat, rect, new Scalar(255, 0, 0, 0), 3, opencv_imgproc.LINE_8, 0);
 
-                            Mat face = new Mat(); // Assume this is your captured face
+                            if ((adjustedX >= rect.x() &&
+                                    adjustedX <= rect.x() + rect.width() &&
+                                    adjustedY >= rect.y() &&
+                                    adjustedY <= rect.y() + rect.height()) == false) {
+                                continue;
+                            }
 
                             // File saving
                             String directory = "src/main/resources/happy_faces/faces_test/";
                             // File dir = new File("src/main/resources/happy_faces/");
                             new File(directory).mkdirs(); // Create directory if not exists
                             String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-                            String filename = directory + "face_" + timestamp + ".jpg";
+                            String filename = directory + "face_" + timestamp + "-" + name + ".jpg";
                             // System.out.println(embedding.length);
                             // if (opencv_imgcodecs.imwrite(filename, mat)) {
                             //     System.out.println("Image saved to " + filename);
@@ -449,17 +665,19 @@ public class FacialCapture {
 
                             Mat selectedFace = new Mat(mat, rect); // Extract the face ROI using the selected Rect
                             // byte[] embedding = FaceProcessor.generateEmbedding(new Mat(mat, rect));
-                            byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
-
-                            if (opencv_imgcodecs.imwrite(filename, selectedFace)) {
+                            // byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
+                            Mat resizedFace = new Mat();
+                            opencv_imgproc.resize(selectedFace, resizedFace, new Size(128, 128));
+                            // if (opencv_imgcodecs.imwrite(filename, selectedFace)) {
+                                if (opencv_imgcodecs.imwrite(filename, resizedFace)) {
                                 System.out.println("Face image saved to " + filename);
                             } else {
                                 System.err.println("Failed to save face image.");
                             }
-                            DatabaseHelper.storeEmbedding(dbConnection, embedding, name);
+                            // DatabaseHelper.storeEmbedding(dbConnection, embedding, name);
                             JOptionPane.showMessageDialog(null, "Face stored successfully.");
                             selectionFrame.dispose(); // Close the selection window
-                            return;
+                            // return;
                             // }
                         }
 
@@ -509,7 +727,10 @@ public class FacialCapture {
                     }
 
                     if (shouldAdd) {
-                        faceRectangles.add(detectedFace);
+                        System.out.println("detectedFace.width() : " + detectedFace.width());
+                        System.out.println("detectedFace.height(): " + detectedFace.height());
+                        // faceRectangles.add(detectedFace);
+                        faceRectangles.add(new Rect(detectedFace));
                     }
                 } else {
                     System.out.println("Invalid face dimensions detected.");

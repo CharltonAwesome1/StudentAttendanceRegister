@@ -196,7 +196,7 @@ public class DatabaseHelper {
     // return false;
     // }
 
-    private static double calculateDistance(byte[] embedding1, byte[] embedding2) {
+    public static double calculateDistance(byte[] embedding1, byte[] embedding2) {
         if (embedding1.length != embedding2.length) {
             return Double.MAX_VALUE; // Return a large value if dimensions do not match
         }
@@ -209,7 +209,7 @@ public class DatabaseHelper {
         return Math.sqrt(Math.sqrt(sum));
     }
 
-    private static double calculateCosineSimilarity(byte[] embedding1, byte[] embedding2) {
+    public static double calculateCosineSimilarity(byte[] embedding1, byte[] embedding2) {
         if (embedding1.length != embedding2.length) {
             return -1.0; // Return invalid similarity if dimensions do not match
         }
