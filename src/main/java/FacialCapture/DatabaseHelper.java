@@ -1,81 +1,11 @@
-// package FacialCapture;
-
-// import java.sql.*;
-// import java.util.Arrays;
-
-// public class DatabaseHelper {
-//     public static Connection connect() {
-//         try {
-//             String url = "jdbc:mysql://localhost:3306/facialcapture";
-//             String user = "root";
-//             String password = "";
-
-//             Connection connection = DriverManager.getConnection(url, user, password);
-//             System.out.println("Connected to the database.");
-//             return connection;
-//         } catch (SQLException e) {
-//             e.printStackTrace();
-//             throw new RuntimeException("Failed to connect to the database.");
-//         }
-//     }
-
-//     public static void storeEmbedding(Connection connection, byte[] embedding) {
-//         try {
-//             String query = "INSERT INTO faces (embedding) VALUES (?)";
-//             PreparedStatement statement = connection.prepareStatement(query);
-//             statement.setBytes(1, embedding);
-//             statement.executeUpdate();
-//         } catch (SQLException e) {
-//             e.printStackTrace();
-//         }
-//     }
-
-//     public static boolean isFaceRecognized(Connection connection, byte[] embedding) {
-//         try {
-//             String query = "SELECT embedding FROM faces";
-//             Statement statement = connection.createStatement();
-//             ResultSet resultSet = statement.executeQuery(query);
-
-//             while (resultSet.next()) {
-//                 byte[] dbEmbedding = resultSet.getBytes("embedding");
-
-//                 // Compare embeddings (simple Euclidean distance)
-//                 double distance = calculateDistance(embedding, dbEmbedding);
-//                 if (distance < 0.5) { // Threshold for recognition
-//                     return true;
-//                 }
-//             }
-//         } catch (SQLException e) {
-//             e.printStackTrace();
-//         }
-//         return false;
-//     }
-
-//     private static double calculateDistance(byte[] embedding1, byte[] embedding2) {
-//         if (embedding1.length != embedding2.length) {
-//             return Double.MAX_VALUE;
-//         }
-
-//         double sum = 0.0;
-//         for (int i = 0; i < embedding1.length; i++) {
-//             double diff = embedding1[i] - embedding2[i];
-//             sum += diff * diff;
-//         }
-
-//         return Math.sqrt(sum);
-//     }
-// }
-
 package FacialCapture;
 
 import java.sql.*;
-// import java.util.Arrays;
 
 public class DatabaseHelper {
 
     public static Connection connect() {
         try {
-            // Define MySQL connection parameters
             String url = "jdbc:mysql://localhost:3306/facialcapture";
             String user = "root";
             String password = "";
@@ -103,7 +33,6 @@ public class DatabaseHelper {
     }
 
     public static void storeEmbedding(Connection connection, byte[] embedding, String name) {
-        // String query = "INSERT INTO faces (embedding, name) VALUES (?, ?)";
         String query = "INSERT INTO faces (thing, name, embedding) VALUES (?, ?, ?)";
         byte[] thingy = null;
 
@@ -123,19 +52,16 @@ public class DatabaseHelper {
     public static String isFaceRecognized(Connection connection, byte[] embedding) {
         String query = "SELECT embedding, name FROM faces";
         System.out.println("query: " + query);
-        // int counter = 0;
-        // query = "";
+        System.out.println("embedding: " + embedding);
         try (
                 Statement statement = connection.createStatement();
                 ResultSet resultSet = statement.executeQuery(query)) {
 
             while (resultSet.next()) {
-                // counter ++;
                 System.out.println("counter one");
                 byte[] dbEmbedding = resultSet.getBytes("embedding");
                 System.out.println("counter two");
                 String name = resultSet.getString("name");
-                // query += name + "\n";
 
                 double distance = calculateDistance(embedding, dbEmbedding);
                 double similarity = calculateCosineSimilarity(embedding, dbEmbedding);
@@ -161,40 +87,6 @@ public class DatabaseHelper {
         return null; // No match found
     }
 
-    // public static boolean isFaceRecognized(Connection connection, byte[]
-    // embedding) {
-    // String query = "SELECT embedding FROM faces";
-
-    // // System.out.println("query");
-    // try (Statement statement = connection.createStatement();
-    // ResultSet resultSet = statement.executeQuery(query)) {
-
-    // while (resultSet.next()) {
-    // byte[] dbEmbedding = resultSet.getBytes("embedding");
-
-    // double distance = calculateDistance(embedding, dbEmbedding);
-    // double similarity = calculateCosineSimilarity(embedding, dbEmbedding);
-    // System.out.println("Cosine similarity: " + similarity);
-
-    // // if (similarity > 0.9) { // Threshold for recognition
-    // if (similarity > 0.4) { // Threshold for recognition
-    // System.out.println("Face recognized with similarity: " + similarity);
-    // return true;
-    // }
-
-    // System.out.println("distance: " + distance);
-    // // if (distance < 0.5) { // Recognition threshold
-    // if (distance < 150) { // Recognition threshold
-    // System.out.println("Face recognized with distance: " + distance);
-    // return true;
-    // }
-    // }
-    // } catch (SQLException e) {
-    // e.printStackTrace();
-    // System.err.println("Failed to compare embeddings.");
-    // }
-    // return false;
-    // }
 
     public static double calculateDistance(byte[] embedding1, byte[] embedding2) {
         if (embedding1.length != embedding2.length) {
@@ -211,7 +103,7 @@ public class DatabaseHelper {
 
     public static double calculateCosineSimilarity(byte[] embedding1, byte[] embedding2) {
         if (embedding1.length != embedding2.length) {
-            return -1.0; // Return invalid similarity if dimensions do not match
+            return -1.0; 
         }
 
         double dotProduct = 0.0;

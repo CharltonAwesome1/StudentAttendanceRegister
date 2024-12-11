@@ -6,11 +6,11 @@ import org.bytedeco.opencv.opencv_core.RectVector;
 import org.bytedeco.opencv.opencv_core.Scalar;
 import org.bytedeco.opencv.opencv_core.Size;
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
-import org.opencv.imgcodecs.Imgcodecs;
+// import org.opencv.imgcodecs.Imgcodecs;
 import org.bytedeco.opencv.opencv_core.Mat;
-import org.bytedeco.opencv.global.opencv_imgcodecs;
+// import org.bytedeco.opencv.global.opencv_imgcodecs;
 
-import java.io.ByteArrayOutputStream;
+// import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,21 +28,13 @@ public class FaceProcessor {
         try {
             faceDetector.detectMultiScale(gray, detectedFaces);
         } catch (Exception e) {
-            // return null;
             return new ArrayList<>();
-
         }
 
         for (int i = 0; i < detectedFaces.size(); i++) {
             Rect rect = detectedFaces.get(i);
 
-            opencv_imgproc.rectangle(
-                    mat,
-                    rect,
-                    new Scalar(0, 255, 0, 0),
-                    2,
-                    opencv_imgproc.LINE_8,
-                    0);
+            opencv_imgproc.rectangle(mat, rect, new Scalar(0, 255, 0, 0), 2, opencv_imgproc.LINE_8, 0);
 
             Mat face = new Mat(mat, rect);
             Mat resizedFace = new Mat();
@@ -56,7 +48,6 @@ public class FaceProcessor {
 
     public static byte[] generateEmbedding(Mat face) {
         byte[] embedding = new byte[(int) (face.total() * face.elemSize())];
-        System.out.println(embedding.length);
         face.data().get(embedding);
         return embedding;
     }
@@ -98,20 +89,8 @@ public class FaceProcessor {
 
         for (int i = 0; i < detectedFaces.size(); i++) {
             Rect rect = detectedFaces.get(i);
-            opencv_imgproc.rectangle(
-                    mat,
-                    rect,
-                    new Scalar(0, 255, 0, 0),
-                    2,
-                    opencv_imgproc.LINE_8,
-                    0);
+            opencv_imgproc.rectangle(mat, rect, new Scalar(0, 255, 0, 0), 2, opencv_imgproc.LINE_8, 0);
         }
     }
-
-    // public static byte[] convertMatToBytes(Mat image) {
-    //     ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    //     opencv_imgcodecs.imencode(".jpg", image, baos);
-    //     return baos.toByteArray();
-    // }
 
 }

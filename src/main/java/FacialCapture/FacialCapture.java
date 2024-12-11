@@ -8,7 +8,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.sql.Connection;
 import java.text.SimpleDateFormat;
-// import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -19,18 +18,11 @@ import org.bytedeco.opencv.opencv_core.RectVector;
 import org.bytedeco.opencv.opencv_core.Scalar;
 import org.bytedeco.opencv.opencv_core.Size;
 import org.bytedeco.opencv.global.opencv_core;
-// import org.bytedeco.javacv.*;
-// import org.bytedeco.opencv.opencv_core.Mat;
 import org.bytedeco.opencv.global.opencv_imgcodecs;
-// import org.bytedeco.opencv.global.opencv_core; 
 import org.bytedeco.opencv.global.opencv_highgui;
 
 import org.bytedeco.opencv.global.opencv_imgproc;
 import org.bytedeco.opencv.opencv_objdetect.CascadeClassifier;
-// import org.opencv.core.Core;
-// import org.opencv.highgui.HighGui;
-// import org.opencv.imgcodecs.Imgcodecs;
-import org.opencv.imgcodecs.Imgcodecs;
 
 public class FacialCapture {
     private static Connection dbConnection;
@@ -45,7 +37,7 @@ public class FacialCapture {
     private static JButton recognizeButton;
     private static JButton buttonThree;
     private static JButton buttonFour;
-    private static JButton buttonFive;
+    private static JButton compareFacesButton;
 
     public static void main(String[] args) {
         try {
@@ -54,13 +46,14 @@ public class FacialCapture {
             System.out.println("Database connection established.");
 
             System.out.println("Initializing camera grabber...");
-            cameraGrabber = new OpenCVFrameGrabber(0);
+            System.out.println(OpenCVFrameGrabber.list);
+            cameraGrabber = new OpenCVFrameGrabber(1);
+            System.out.println(OpenCVFrameGrabber.getDefault());
             cameraGrabber.start();
             System.out.println("Camera grabber initialized.");
             System.out.println(cameraGrabber.getFrameRate());
             System.out.println(cameraGrabber.getImageWidth());
             System.out.println(cameraGrabber.getImageHeight());
-            // System.out.println(cameraGrabber.get
 
             System.out.println("Loading face detector...");
             faceDetector = new CascadeClassifier("haarcascade_frontalface_alt.xml");
@@ -83,22 +76,18 @@ public class FacialCapture {
         buttonPanel = new JPanel();
         nameLabel = new JLabel("Enter your name");
         nameLabel = new JLabel("Enter your name");
-        nameLabel.setPreferredSize(new Dimension(150, 30)); // Set a fixed size for JLabel
+        nameLabel.setPreferredSize(new Dimension(150, 30));
         nameTextField = new JTextField();
-        nameTextField.setPreferredSize(new Dimension(200, 30)); // Set a fixed size for JTextField
-        // JTextField nameTextField = new JTextField();
+        nameTextField.setPreferredSize(new Dimension(200, 30));
         captureButton = new JButton("Capture Face");
         recognizeButton = new JButton("Recognize Face");
         buttonThree = new JButton("buttonThree");
         buttonFour = new JButton("buttonFour");
-        buttonFive = new JButton("Find Face");
-        // buttonPanel.add(nameLabel);
+        compareFacesButton = new JButton("Find Face");
         buttonPanel.add(nameTextField);
         buttonPanel.add(captureButton);
         buttonPanel.add(recognizeButton);
-        buttonPanel.add(buttonThree);
-        buttonPanel.add(buttonFour);
-        buttonPanel.add(buttonFive);
+        buttonPanel.add(compareFacesButton);
 
         frame.add(buttonPanel, BorderLayout.SOUTH);
 
@@ -106,7 +95,7 @@ public class FacialCapture {
         recognizeButton.addActionListener(e -> recognizeFaceTwo());
         buttonThree.addActionListener(e -> buttonThreeMethod());
         buttonFour.addActionListener(e -> buttonFourMethod());
-        buttonFive.addActionListener(e -> compareCaptureFaceToSavedImages());
+        compareFacesButton.addActionListener(e -> compareCaptureFaceToSavedImages());
 
         new Thread(FacialCapture::updateCameraFeed).start();
 
@@ -121,8 +110,8 @@ public class FacialCapture {
             if (frame != null) {
                 Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
 
-                List<Rect> detectedFaces = detectFaces(mat);
-                // System.out.println("detectedFaces.size(): " + detectedFaces.size());
+                Mat originalMat = mat.clone(); // Preserve the original mat
+                List<Rect> detectedFaces = detectFaces(originalMat); // Pass a clone if detectFaces modifies the input
 
                 if (detectedFaces.isEmpty()) {
                     JOptionPane.showMessageDialog(null,
@@ -131,13 +120,7 @@ public class FacialCapture {
                 }
 
                 for (Rect rect : detectedFaces) {
-                    opencv_imgproc.rectangle(
-                            mat,
-                            rect,
-                            new Scalar(0, 255, 0, 0),
-                            2,
-                            opencv_imgproc.LINE_8,
-                            0);
+                    opencv_imgproc.rectangle(mat, rect, new Scalar(0, 255, 0, 0), 2, opencv_imgproc.LINE_8, 0);
                 }
 
                 BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(mat));
@@ -154,12 +137,12 @@ public class FacialCapture {
                 imageLabel.addMouseListener(new MouseAdapter() {
                     @Override
                     public void mouseClicked(MouseEvent e) {
-                        // String name = nameTextField.getText().trim();
 
-                        // if (name.isEmpty()) {
-                        //     System.out.println("Name cannot be empty");
-                        //     return;
-                        // }
+                        int entriesFoundCounter = 0;
+                        int facesLoopCounter = 0;
+                        int x, y, adjustedX, adjustedY;
+                        List<Mat> images = new ArrayList<>();
+                        List<RetrievedData> retrievedDatas = new ArrayList<>();
 
                         File dir = new File("src/main/resources/happy_faces/faces_test/");
                         File[] files = dir.listFiles((d, fileName) -> fileName.toLowerCase().endsWith(".jpg"));
@@ -167,17 +150,16 @@ public class FacialCapture {
                         System.out.println("files.length: " + files.length);
 
                         if (files == null || files.length == 0) {
-                            System.out.println("No .png images found in the specified folder.");
+                            System.out.println("No .jpg images found in the specified folder.");
                             return;
                         }
-
-                        List<Mat> images = new ArrayList<>();
 
                         for (File file : files) {
                             System.out.println("Reading file: " + file.getAbsolutePath());
                             Mat img = opencv_imgcodecs.imread(file.getAbsolutePath(), 1);
                             if (!img.empty()) {
                                 images.add(img);
+                                retrievedDatas.add(new RetrievedData(img, file.getName()));
                             }
                         }
 
@@ -186,11 +168,11 @@ public class FacialCapture {
                             return;
                         }
 
-                        int x = e.getX();
-                        int y = e.getY();
+                        x = e.getX();
+                        y = e.getY();
+                        adjustedX = (int) (x * scaleX);
+                        adjustedY = (int) (y * scaleY);
 
-                        int adjustedX = (int) (x * scaleX);
-                        int adjustedY = (int) (y * scaleY);
                         System.out.println("Mouse clicked at: (" + e.getX() + ", " + e.getY() + ")");
                         System.out.println("Scaling factors: scaleX=" + scaleX + ", scaleY=" + scaleY);
                         System.out.println("Adjusted coordinates: adjustedX=" + adjustedX + ", adjustedY=" + adjustedY);
@@ -208,21 +190,29 @@ public class FacialCapture {
                                     adjustedX <= rect.x() + rect.width() &&
                                     adjustedY >= rect.y() &&
                                     adjustedY <= rect.y() + rect.height()) == false) {
+                                facesLoopCounter++;
                                 continue;
                             }
 
-                            opencv_imgproc.rectangle(mat, rect, new Scalar(255, 0, 0, 0), 3, opencv_imgproc.LINE_8, 0);
-
-                            Mat selectedFace = new Mat(mat, rect);
-                            // Mat baseImageForCompareOne = images.get(1);
+                            // opencv_imgproc.rectangle(mat, rect, new Scalar(255, 0, 0, 0), 3, opencv_imgproc.LINE_8, 0);
+                            Mat selectedFace = new Mat(originalMat, rect);
+                            // Mat selectedFace = new Mat(mat, rect);
+                            // System.out.println(mat.);
                             Mat resizedFace = new Mat();
-                            opencv_imgproc.resize(selectedFace, resizedFace, new Size(128, 128)); // Resize face to 128x128 pixels
+                            opencv_imgproc.resize(selectedFace, resizedFace, new Size(128, 128));
                             byte[] capturedEmbedding = FaceProcessor.generateEmbedding(resizedFace);
-                            System.out.println("capturedEmbedding.length:" + capturedEmbedding.length);
-                            // byte[] capturedEmbedding = FaceProcessor.generateEmbedding(selectedFace);
 
-                            for (int i = 0; i < images.size(); i++) {
-                                Mat currentImage = images.get(i);
+                            // for (int i = 0; i < images.size(); i++) {
+                            for (int i = 0; i < retrievedDatas.size(); i++) {
+
+                                String fileCapturedFaceName = retrievedDatas.get(i).fileName.contains("-")
+                                        ? retrievedDatas.get(i).fileName
+                                                .substring(retrievedDatas.get(i).fileName
+                                                        .lastIndexOf("-") + 1)
+                                        : retrievedDatas.get(i).fileName;
+                                fileCapturedFaceName = fileCapturedFaceName.substring(0,
+                                        fileCapturedFaceName.length() - 4);
+                                Mat currentImage = retrievedDatas.get(i).image;
 
                                 byte[] embedding = FaceProcessor.generateEmbedding(currentImage);
 
@@ -230,11 +220,25 @@ public class FacialCapture {
                                 double similarity = DatabaseHelper.calculateCosineSimilarity(embedding,
                                         capturedEmbedding);
 
-                                System.out.println("Cosine similarity: " + similarity);
-                                System.out.println("distance: " + distance);
-                                System.out.println();
+                                if (distance < 150 && similarity > 0.5) {
+                                    entriesFoundCounter++;
+                                    String recognizedName = String.format("Face recognized as %s",
+                                            fileCapturedFaceName);
+                                    System.out.println("Name: " + fileCapturedFaceName
+                                            + ",Cosine similarity: " + similarity
+                                            + ",distance: " + distance);
+                                    JOptionPane.showMessageDialog(null, recognizedName);
+                                }
                             }
 
+                        }
+
+                        if (facesLoopCounter == detectedFaces.size()) {
+                            JOptionPane.showMessageDialog(null, "Click inside a rectangle to scan face!", null, 2);
+                        } else if (entriesFoundCounter > 1) {
+                            JOptionPane.showMessageDialog(null, "Multiple entries found!", null, 0);
+                        } else if (entriesFoundCounter == 0) {
+                            JOptionPane.showMessageDialog(null, "No entries found!", null, 2);
                         }
                     }
                 });
@@ -377,20 +381,18 @@ public class FacialCapture {
         try {
             List<Mat> frameList = new ArrayList<>();
             long startTime = System.currentTimeMillis();
+            // System.out.println("Before loop: " + System.currentTimeMillis());
 
             while (System.currentTimeMillis() - startTime < 1000) {
+            // while (System.currentTimeMillis() - startTime < 500) {
                 org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
                 if (grabbedFrame != null) {
                     Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
                     frameList.add(frameMatrix);
-                    // OpenCVFrameConverter.ToMat().close();
-                    // frameMatrix.release();
-                    // frameMatrix.close();
                 }
-
                 // Thread.sleep(1); 
             }
-            // System.out.println("frameList.length: " + frameList.size());
+            // System.out.println("After loop: " + System.currentTimeMillis());
 
             List<Rect> frozenFaces = new ArrayList<>();
             for (Mat frameMatrix : frameList) {
@@ -398,16 +400,20 @@ public class FacialCapture {
                     System.out.println("Skipped an empty frame.");
                     continue;
                 }
-                List<Rect> detectedFaces = detectFaces(frameMatrix);
+                List<Rect> detectedFaces = detectFacesNoValidation(frameMatrix);
 
                 for (Rect rect : detectedFaces) {
                     frozenFaces.add(new Rect(rect.x(), rect.y(), rect.width(), rect.height()));
                 }
             }
 
-            System.out.println("outside");
+            // System.out.println("After frozenFaces: " + System.currentTimeMillis());
+            // System.out.println("frozenFaces.size(): " + frozenFaces.size());
+
+            // System.out.println("outside");
 
             List<Rect> newFrozenFaces = validateFaceRectangles(frozenFaces);
+            // System.out.println("newFrozenFaces.size(): " + newFrozenFaces.size());
 
             if (newFrozenFaces.isEmpty()) {
                 JOptionPane.showMessageDialog(null,
@@ -417,10 +423,12 @@ public class FacialCapture {
 
             List<Mat> images = new ArrayList<>();
 
-            System.out.println("frameList.size(): " + frameList.size());
+            // System.out.println("frameList.size(): " + frameList.size());
             for (int i = 0; i < frameList.size(); i++) {
                 images.add(frameList.get(i));
             }
+
+            // System.out.println("After frameList.size: " + System.currentTimeMillis());
 
             org.bytedeco.opencv.opencv_core.Mat avgImage = (org.bytedeco.opencv.opencv_core.Mat) images.get(0).clone();
             if (avgImage.empty()) {
@@ -457,6 +465,8 @@ public class FacialCapture {
 
             }
 
+            // System.out.println("After images.size: " + System.currentTimeMillis());
+
             for (Rect rect : newFrozenFaces) {
                 opencv_imgproc.rectangle(
                         avgImage,
@@ -479,6 +489,8 @@ public class FacialCapture {
             double scaleX = (double) image.getWidth() / frameList.get(0).cols();
             double scaleY = (double) image.getHeight() / frameList.get(0).rows();
 
+            // long endTime = System.currentTimeMillis();
+            // System.out.println("Duration:" + (endTime - startTime));
             imageLabel.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mouseClicked(MouseEvent e) {
@@ -563,8 +575,8 @@ public class FacialCapture {
             org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
             if (frame != null) {
                 Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
-
-                List<Rect> detectedFaces = detectFaces(mat);
+                Mat originalMat = mat.clone(); // Preserve the original mat
+                List<Rect> detectedFaces = detectFaces(originalMat); // Pass a clone if detectFaces modifies the input
                 System.out.println("detectedFaces.size(): " + detectedFaces.size());
 
                 if (detectedFaces.isEmpty()) {
@@ -574,15 +586,7 @@ public class FacialCapture {
                 }
 
                 for (Rect rect : detectedFaces) {
-                    // System.out.println(rect.x());
-                    // System.out.println(rect.y());
-                    opencv_imgproc.rectangle(
-                            mat,
-                            rect,
-                            new Scalar(0, 255, 0, 0),
-                            2,
-                            opencv_imgproc.LINE_8,
-                            0);
+                    opencv_imgproc.rectangle(mat, rect, new Scalar(0, 255, 0, 0), 2, opencv_imgproc.LINE_8, 0);
                 }
 
                 BufferedImage image = new Java2DFrameConverter().convert(new OpenCVFrameConverter.ToMat().convert(mat));
@@ -594,13 +598,6 @@ public class FacialCapture {
                 selectionFrame.add(imageLabel);
                 selectionFrame.setVisible(true);
 
-                // double scaleX = (double) image.getWidth() / mat.cols();
-                // double scaleY = (double) image.getHeight() / mat.rows();
-
-                // System.out.println("image.getWidth(): " + image.getWidth());
-                // System.out.println("image.getHeight(): " + image.getHeight());
-                // System.out.println("mat.cols() " + mat.cols());
-                // System.out.println("mat.rows() " + mat.rows());
                 double scaleX = (double) mat.cols() / image.getWidth();
                 double scaleY = (double) mat.rows() / image.getHeight();
 
@@ -609,11 +606,6 @@ public class FacialCapture {
                     public void mouseClicked(MouseEvent e) {
                         String name = nameTextField.getText().trim();
                         boolean faceSelected = true;
-                        // System.out.println("image.getWidth(): " + image.getWidth());
-                        // System.out.println("image.getHeight(): " + image.getHeight());
-                        // System.out.println("mat.cols() " + mat.cols());
-                        // System.out.println("mat.rows() " + mat.rows());
-                        // int counter = 0;
 
                         if (name.isEmpty()) {
                             System.out.println("Name cannot be empty");
@@ -638,8 +630,6 @@ public class FacialCapture {
 
                         for (Rect rect : detectedFaces) {
 
-                            // opencv_imgproc.rectangle(mat, rect, new Scalar(255, 0, 0, 0), 3, opencv_imgproc.LINE_8, 0);
-
                             if ((adjustedX >= rect.x() &&
                                     adjustedX <= rect.x() + rect.width() &&
                                     adjustedY >= rect.y() &&
@@ -649,8 +639,7 @@ public class FacialCapture {
 
                             // File saving
                             String directory = "src/main/resources/happy_faces/faces_test/";
-                            // File dir = new File("src/main/resources/happy_faces/");
-                            new File(directory).mkdirs(); // Create directory if not exists
+                            new File(directory).mkdirs();
                             String timestamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
                             String filename = directory + "face_" + timestamp + "-" + name + ".jpg";
                             // System.out.println(embedding.length);
@@ -663,19 +652,20 @@ public class FacialCapture {
                             //     System.err.println("Failed to save image.");
                             // }
 
-                            Mat selectedFace = new Mat(mat, rect); // Extract the face ROI using the selected Rect
+                            Mat selectedFace = new Mat(originalMat, rect); // Extract the face ROI using the selected Rect
                             // byte[] embedding = FaceProcessor.generateEmbedding(new Mat(mat, rect));
                             // byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
                             Mat resizedFace = new Mat();
                             opencv_imgproc.resize(selectedFace, resizedFace, new Size(128, 128));
                             // if (opencv_imgcodecs.imwrite(filename, selectedFace)) {
-                                if (opencv_imgcodecs.imwrite(filename, resizedFace)) {
+                            if (opencv_imgcodecs.imwrite(filename, resizedFace)) {
                                 System.out.println("Face image saved to " + filename);
                             } else {
                                 System.err.println("Failed to save face image.");
                             }
                             // DatabaseHelper.storeEmbedding(dbConnection, embedding, name);
                             JOptionPane.showMessageDialog(null, "Face stored successfully.");
+                            nameTextField.setText("");
                             selectionFrame.dispose(); // Close the selection window
                             // return;
                             // }
@@ -692,6 +682,42 @@ public class FacialCapture {
         }
     }
 
+    private static List<Rect> detectFacesNoValidation(Mat frameMatrix) {
+        List<Rect> faceRectangles = new ArrayList<>();
+        RectVector detectedFaces = new RectVector();
+
+        try {
+            Mat grayFrame = new Mat();
+            // System.out.println("faceDetector.detectMultiScale 1 : " + System.currentTimeMillis());
+            opencv_imgproc.cvtColor(frameMatrix, grayFrame, opencv_imgproc.COLOR_BGR2GRAY);
+            // System.out.println("faceDetector.detectMultiScale 2 : " + System.currentTimeMillis());
+            faceDetector.detectMultiScale(grayFrame, detectedFaces);
+            // System.out.println("faceDetector.detectMultiScale 3 : " + System.currentTimeMillis());
+
+            for (int i = 0; i < detectedFaces.size(); i++) {
+                Rect detectedFace = detectedFaces.get(i);
+
+                if (detectedFace.width() > 0 && detectedFace.height() > 0) {
+                    boolean shouldAdd = true;
+
+                    if (shouldAdd) {
+                        faceRectangles.add(new Rect(detectedFace));
+                    }
+                } else {
+                    System.out.println("Invalid face dimensions detected.");
+                }
+            }
+            // System.out.println("faceDetector.detectMultiScale 4 : " + System.currentTimeMillis());
+            
+
+            grayFrame.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return faceRectangles;
+    }
+
     private static List<Rect> detectFaces(Mat frameMatrix) {
         List<Rect> faceRectangles = new ArrayList<>();
         RectVector detectedFaces = new RectVector();
@@ -703,7 +729,7 @@ public class FacialCapture {
 
             // CHARLTON - SLOWS DOWN DETECTION AND CAUSES FALSE NEGATIVES
             // Enhance contrast 
-            // opencv_imgproc.equalizeHist(grayFrame, grayFrame);
+            opencv_imgproc.equalizeHist(grayFrame, grayFrame);
 
             faceDetector.detectMultiScale(grayFrame, detectedFaces);
 
@@ -727,8 +753,8 @@ public class FacialCapture {
                     }
 
                     if (shouldAdd) {
-                        System.out.println("detectedFace.width() : " + detectedFace.width());
-                        System.out.println("detectedFace.height(): " + detectedFace.height());
+                        // System.out.println("detectedFace.width() : " + detectedFace.width());
+                        // System.out.println("detectedFace.height(): " + detectedFace.height());
                         // faceRectangles.add(detectedFace);
                         faceRectangles.add(new Rect(detectedFace));
                     }
@@ -771,6 +797,20 @@ public class FacialCapture {
         int unionArea = areaRect1 + areaRect2 - intersectionArea;
 
         return (double) intersectionArea / unionArea;
+    }
+
+    public static class RetrievedData {
+        Mat image;
+        String fileName;
+
+        public RetrievedData() {
+
+        }
+
+        public RetrievedData(Mat image, String fileName) {
+            this.image = image;
+            this.fileName = fileName;
+        }
     }
 
 }
