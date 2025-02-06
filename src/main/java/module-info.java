@@ -10,7 +10,9 @@ module FacialCapture {
     // requires org.bytedeco.javacpp.Loader;
     // requires org.bytedeco.javacpp.chrono;
     // requires org.byte
+    requires javafx.graphics;
     requires java.desktop; // For Swing, AWT, and image handling (BufferedImage)
+    // requires java.g;
     requires transitive java.sql; // For JDBC (java.sql.Connection)
     // requires org.bytedeco.opencv.*;
 

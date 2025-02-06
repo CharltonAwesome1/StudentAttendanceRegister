@@ -1,6 +1,11 @@
 package FacialCapture;
 
 import java.sql.*;
+import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 
 public class DatabaseHelper {
 
@@ -120,5 +125,56 @@ public class DatabaseHelper {
         }
 
         return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+
+    public static void saveEmbeddingsAsImages(Connection connection) {
+        String query = "SELECT embedding FROM faces";
+    
+        try (Statement statement = connection.createStatement();
+             ResultSet resultSet = statement.executeQuery(query)) {
+    
+            int counter = 0;
+            while (resultSet.next()) {
+                byte[] imageData = resultSet.getBytes("embedding");
+    
+                // Debug: Print the size of the image data
+                System.out.println("Image data size for entry " + counter + ": " + (imageData != null ? imageData.length : "null"));
+    
+                // Validate the image data
+                if (imageData == null || imageData.length == 0) {
+                    System.err.println("Skipping entry " + counter + ": Invalid or empty image data.");
+                    continue;
+                }
+    
+                // Convert byte array to BufferedImage
+                ByteArrayInputStream bis = new ByteArrayInputStream(imageData);
+                BufferedImage image = ImageIO.read(bis);
+    
+                // Check if the image is null
+                if (image == null) {
+                    System.err.println("Skipping entry " + counter + ": Failed to decode image data.");
+                    continue;
+                }
+    
+                // Save the image as a .jpg file
+                File outputFile = new File("face_image_" + counter + ".jpg");
+                ImageIO.write(image, "jpg", outputFile);
+                System.out.println("Saved image: " + outputFile.getAbsolutePath());
+    
+                counter++;
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            System.err.println("Failed to retrieve embeddings from the database.");
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.err.println("Failed to convert byte array to image.");
+        }
+    }
+
+    public static void main(String[] args) {
+        Connection connection = connect();
+        saveEmbeddingsAsImages(connection); // Call the new method
     }
 }

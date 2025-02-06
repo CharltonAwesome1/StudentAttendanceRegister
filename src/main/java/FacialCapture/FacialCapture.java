@@ -5,7 +5,9 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
 import java.sql.Connection;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -38,6 +40,7 @@ public class FacialCapture {
     private static JButton buttonThree;
     private static JButton buttonFour;
     private static JButton compareFacesButton;
+    private static JButton captureMultiAngleFaceButton;
 
     public static void main(String[] args) {
         try {
@@ -48,6 +51,7 @@ public class FacialCapture {
             System.out.println("Initializing camera grabber...");
             System.out.println(OpenCVFrameGrabber.list);
             cameraGrabber = new OpenCVFrameGrabber(1);
+            // cameraGrabber = new OpenCVFrameGrabber(0);
             System.out.println(OpenCVFrameGrabber.getDefault());
             cameraGrabber.start();
             System.out.println("Camera grabber initialized.");
@@ -84,10 +88,12 @@ public class FacialCapture {
         buttonThree = new JButton("buttonThree");
         buttonFour = new JButton("buttonFour");
         compareFacesButton = new JButton("Find Face");
+        captureMultiAngleFaceButton = new JButton("Capture Multi Angle Face");
         buttonPanel.add(nameTextField);
         buttonPanel.add(captureButton);
         buttonPanel.add(recognizeButton);
         buttonPanel.add(compareFacesButton);
+        buttonPanel.add(captureMultiAngleFaceButton);
 
         frame.add(buttonPanel, BorderLayout.SOUTH);
 
@@ -96,12 +102,131 @@ public class FacialCapture {
         buttonThree.addActionListener(e -> buttonThreeMethod());
         buttonFour.addActionListener(e -> buttonFourMethod());
         compareFacesButton.addActionListener(e -> compareCaptureFaceToSavedImages());
+        captureMultiAngleFaceButton.addActionListener(e -> captureMultiAngleFace());
 
         new Thread(FacialCapture::updateCameraFeed).start();
 
         frame.setVisible(true);
 
     }
+
+    private static void captureMultiAngleFace() {
+        try {
+            List<Mat> frames = new ArrayList<>();
+            int numberOfPicturesToTake = 100;
+            for (int i = 0; i < 100; i++) { // Capture 3 frames
+                Thread.sleep(33);
+                org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
+                if (frame != null) {
+                    frames.add(new OpenCVFrameConverter.ToMat().convert(frame));
+                }
+            }
+
+            String imageDirectoryPath = "src/main/java/FacialCapture/test_images/";
+
+            for (int i = 0; i < frames.size(); i++) {
+                String imagePath = "frame_" + (i + 1) + ".jpg";
+                opencv_imgcodecs.imwrite(imageDirectoryPath + imagePath, frames.get(i));
+            }
+
+            // String imagePath1 = "face_1.jpg";
+            // String imagePath2 = "face_2.jpg";
+            // opencv_imgcodecs.imwrite("src/main/java/FacialCapture/" + imagePath1, frames.get(0));
+            // opencv_imgcodecs.imwrite("src/main/java/FacialCapture/" + imagePath2, frames.get(2));
+
+            // // Call Python script to compute disparity (depth estimation)
+            // callPythonDepthEstimation(imagePath1, imagePath2);
+            callPythonDepthEstimation("imageDirectoryPath/test_images");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static String callPythonDepthEstimation(String imageDirectoryPath) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("python", "src/main/java/FacialCapture/depth_estimation.py",
+                    imageDirectoryPath);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("Python Output: " + line);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("Python script executed successfully.");
+                return "depth_embedding.png"; // Expected output depth map
+            } else {
+                System.err.println("Python script failed with exit code: " + exitCode);
+                return null;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static String callPythonDepthEstimation(String imagePath1, String imagePath2) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("python", "src/main/java/FacialCapture/depth_estimation.py",
+                    imagePath1, imagePath2);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("Python Output: " + line);
+            }
+
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("Python script executed successfully.");
+                return "depth_embedding.png"; // Expected output depth map
+            } else {
+                System.err.println("Python script failed with exit code: " + exitCode);
+                return null;
+            }
+            // process.waitFor();
+            // return "rc/main/java/FacialCapture/depth_disparity.jpg"; // Expected output depth map
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private static void captureFaceAndEstimateDepth() {
+        try {
+            org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
+            if (frame != null) {
+                Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
+                String imagePath = "captured_face.jpg";
+                opencv_imgcodecs.imwrite(imagePath, mat);
+
+                // Call Python script for depth estimation
+                String depthImagePath = callPythonDepthEstimation(imagePath);
+                if (depthImagePath != null) {
+                    System.out.println("Depth estimation saved: " + depthImagePath);
+                    JOptionPane.showMessageDialog(null, "Depth estimation complete!");
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // private static String callPythonDepthEstimation(String imagePath) {
+    //     try {
+    //         ProcessBuilder pb = new ProcessBuilder("python", "depth_estimation.py", imagePath);
+    //         Process process = pb.start();
+    //         process.waitFor();
+    //         return "depth_face.jpg"; // Expected depth image output
+    //     } catch (Exception e) {
+    //         e.printStackTrace();
+    //         return null;
+    //     }
+    // }
 
     private static void compareCaptureFaceToSavedImages() {
 
@@ -110,8 +235,8 @@ public class FacialCapture {
             if (frame != null) {
                 Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
 
-                Mat originalMat = mat.clone(); // Preserve the original mat
-                List<Rect> detectedFaces = detectFaces(originalMat); // Pass a clone if detectFaces modifies the input
+                Mat originalMat = mat.clone();
+                List<Rect> detectedFaces = detectFaces(originalMat);
 
                 if (detectedFaces.isEmpty()) {
                     JOptionPane.showMessageDialog(null,
@@ -384,7 +509,7 @@ public class FacialCapture {
             // System.out.println("Before loop: " + System.currentTimeMillis());
 
             while (System.currentTimeMillis() - startTime < 1000) {
-            // while (System.currentTimeMillis() - startTime < 500) {
+                // while (System.currentTimeMillis() - startTime < 500) {
                 org.bytedeco.javacv.Frame grabbedFrame = cameraGrabber.grab();
                 if (grabbedFrame != null) {
                     Mat frameMatrix = new OpenCVFrameConverter.ToMat().convert(grabbedFrame);
@@ -563,7 +688,7 @@ public class FacialCapture {
                     BufferedImage videoFrame = new Java2DFrameConverter().convert(grabbedFrame);
                     SwingUtilities.invokeLater(() -> videoDisplayLabel.setIcon(new ImageIcon(videoFrame)));
                 }
-                // Thread.sleep(33); // ~30fps
+                // Thread.sleep(33); 
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -575,8 +700,8 @@ public class FacialCapture {
             org.bytedeco.javacv.Frame frame = cameraGrabber.grab();
             if (frame != null) {
                 Mat mat = new OpenCVFrameConverter.ToMat().convert(frame);
-                Mat originalMat = mat.clone(); // Preserve the original mat
-                List<Rect> detectedFaces = detectFaces(originalMat); // Pass a clone if detectFaces modifies the input
+                Mat originalMat = mat.clone();
+                List<Rect> detectedFaces = detectFaces(originalMat);
                 System.out.println("detectedFaces.size(): " + detectedFaces.size());
 
                 if (detectedFaces.isEmpty()) {
@@ -652,7 +777,7 @@ public class FacialCapture {
                             //     System.err.println("Failed to save image.");
                             // }
 
-                            Mat selectedFace = new Mat(originalMat, rect); // Extract the face ROI using the selected Rect
+                            Mat selectedFace = new Mat(originalMat, rect);
                             // byte[] embedding = FaceProcessor.generateEmbedding(new Mat(mat, rect));
                             // byte[] embedding = FaceProcessor.generateEmbedding(selectedFace);
                             Mat resizedFace = new Mat();
@@ -666,7 +791,7 @@ public class FacialCapture {
                             // DatabaseHelper.storeEmbedding(dbConnection, embedding, name);
                             JOptionPane.showMessageDialog(null, "Face stored successfully.");
                             nameTextField.setText("");
-                            selectionFrame.dispose(); // Close the selection window
+                            selectionFrame.dispose();
                             // return;
                             // }
                         }
@@ -708,7 +833,6 @@ public class FacialCapture {
                 }
             }
             // System.out.println("faceDetector.detectMultiScale 4 : " + System.currentTimeMillis());
-            
 
             grayFrame.close();
         } catch (Exception e) {

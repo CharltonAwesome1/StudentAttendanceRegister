@@ -25,3 +25,5 @@ yarn-error.log*
 
 target/
 target/.*
+
+src/main/resources/happy_faces/
